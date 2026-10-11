@@ -23,13 +23,45 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+      - name: Configure fixed signing key
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$KEYSTORE_BASE64" && -z "$STORE_PASSWORD" && -z "$KEY_ALIAS" && -z "$KEY_PASSWORD" ]]; then
+            echo "mode=debug" >> "$GITHUB_OUTPUT"
+            echo "Signing secrets are not configured; building a debug artifact."
+            exit 0
+          fi
+          if [[ -z "$KEYSTORE_BASE64" || -z "$STORE_PASSWORD" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
+            echo "Configure all four Android signing secrets, or remove them all." >&2
+            exit 1
+          fi
+          umask 077
+          keystore="$RUNNER_TEMP/gsm2sip-signing.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          {
+            echo "GSM2SIP_SIGNING_KEYSTORE=$keystore"
+            echo "GSM2SIP_SIGNING_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "GSM2SIP_SIGNING_KEY_ALIAS=$KEY_ALIAS"
+            echo "GSM2SIP_SIGNING_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+          echo "mode=release" >> "$GITHUB_OUTPUT"
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --no-daemon
       - name: Build APK and Magisk module
-        run: SKIP_INSTALL=1 ./build.sh
+        run: |
+          if [[ -n "${GSM2SIP_SIGNING_KEYSTORE:-}" ]]; then
+            SKIP_INSTALL=1 ./build.sh release
+          else
+            SKIP_INSTALL=1 ./build.sh
+          fi
       - uses: actions/upload-artifact@v4
         with:
-          name: gsm2sip-debug-${{ github.sha }}
+          name: gsm2sip-${{ steps.signing.outputs.mode }}-${{ github.sha }}
           path: |
             gateway.apk
             gateway-magisk.zip

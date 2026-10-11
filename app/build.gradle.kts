@@ -3,6 +3,17 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val signingEnvironment = listOf(
+    System.getenv("GSM2SIP_SIGNING_KEYSTORE"),
+    System.getenv("GSM2SIP_SIGNING_STORE_PASSWORD"),
+    System.getenv("GSM2SIP_SIGNING_KEY_ALIAS"),
+    System.getenv("GSM2SIP_SIGNING_KEY_PASSWORD")
+)
+require(signingEnvironment.all { it.isNullOrBlank() } || signingEnvironment.all { !it.isNullOrBlank() }) {
+    "Set all four GSM2SIP_SIGNING_* environment variables to use a fixed signing key"
+}
+val fixedSigningEnabled = signingEnvironment.all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.callagent.gateway"
     compileSdk = 34
@@ -15,19 +26,21 @@ android {
         versionName = "1.2.0"
     }
 
-    // A release build is signed with the same debug key the debug build uses.
-    // That is deliberate: it keeps the signature identical, so a release APK can
-    // replace a debug one inside the Magisk module without PackageManager
-    // rejecting it for a signature mismatch.  The point of building release here
-    // is not secrecy, it is `debuggable=false` — ART compiles a debuggable app in
-    // a deoptimizable mode with much weaker inlining, which costs real CPU in the
-    // per-frame audio loops.
+    // A fixed keystore can be provided for repeatable fork builds. If absent,
+    // preserve the project's existing shared debug-key behavior for local builds.
     signingConfigs {
         create("shared") {
-            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            if (fixedSigningEnabled) {
+                storeFile = file(requireNotNull(System.getenv("GSM2SIP_SIGNING_KEYSTORE")))
+                storePassword = requireNotNull(System.getenv("GSM2SIP_SIGNING_STORE_PASSWORD"))
+                keyAlias = requireNotNull(System.getenv("GSM2SIP_SIGNING_KEY_ALIAS"))
+                keyPassword = requireNotNull(System.getenv("GSM2SIP_SIGNING_KEY_PASSWORD"))
+            } else {
+                storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
         }
     }
 

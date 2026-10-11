@@ -139,6 +139,38 @@ chmod +x build.sh
 Outputs:
 - `gateway-magisk.zip` — Magisk module containing the APK, permissions, and audio tools (tinymix, tinycap). This is the only file you need to install.
 
+### Stable fork signing
+
+Release builds can use a persistent keystore by setting all four environment
+variables: `GSM2SIP_SIGNING_KEYSTORE`,
+`GSM2SIP_SIGNING_STORE_PASSWORD`, `GSM2SIP_SIGNING_KEY_ALIAS`, and
+`GSM2SIP_SIGNING_KEY_PASSWORD`. Without them, local release builds retain the
+existing shared debug-key behavior.
+
+For GitHub Actions, add these repository secrets:
+
+- `ANDROID_SIGNING_KEYSTORE_BASE64` — the keystore file encoded as one Base64 string
+- `ANDROID_SIGNING_STORE_PASSWORD`
+- `ANDROID_SIGNING_KEY_ALIAS`
+- `ANDROID_SIGNING_KEY_PASSWORD`
+
+When all four are present, Actions builds a release APK and Magisk module signed
+with that key. The keystore is restored under the runner's temporary directory
+and is not added to the checkout. With no signing secrets, Actions still builds
+a debug artifact. This checkout's local release build uses
+`%USERPROFILE%\.android\debug.keystore`; to make Actions match it, its contents
+can be encoded in PowerShell with:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$env:USERPROFILE\.android\debug.keystore"))
+```
+
+For this existing debug keystore, use `androiddebugkey` as the alias and
+`android` for both passwords. Keep a private backup of the keystore: future
+updates must use the same key. A fork key will not update an APK signed with a
+different upstream key; in that case Android requires removing the old package
+before installing the fork build.
+
 The APK itself is architecture-independent, but `tinymix` is not: the ALSA
 control ioctls encode the size of structs containing `long`, so an arm64 build
 and an armeabi-v7a build speak different ioctl ABIs and neither works on the
