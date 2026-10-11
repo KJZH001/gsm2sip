@@ -16,3 +16,7 @@ app/build/
 .idea/
 *.iml
 .vscode/
+
+# private file
+note.txt
+start.txt
